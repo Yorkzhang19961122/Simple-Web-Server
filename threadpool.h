@@ -69,7 +69,7 @@ threadpool<T>::threadpool(int thread_number, int max_requests):
             }
             /*创建成功后设置脱离: 设置失败，释放数组，抛出异常*/
             if(pthread_detach(m_threads[i])) {
-                delete[] m_thread;
+                delete[] m_threads;
                 throw std::exception();
             }
         }
@@ -96,7 +96,7 @@ bool threadpool<T>::append(T* request) {
     /*否则正常添加任务，并解锁*/
     m_workqueue.push_back(request);
     m_queuelocker.unlock();
-    /*信号量增加*/
+    /*信号量加1，当信号量值大于0时，其他正在调用wait()等待信号量的线程将被唤醒*/
     m_queuestat.post();
     return true;
 }
@@ -114,7 +114,7 @@ void threadpool<T>::run() {
     while(!m_stop) {
         /*通过判断信号量是否有值来确定是否有任务可做，有的话不阻塞且信号量减1，没有的话就阻塞*/
         m_queuestat.wait();
-        /*有任务，要操作队列所以上锁*/
+        /*有任务，要操作队列(共享资源)所以上锁*/
         m_queuelocker.lock();
         /*判断请求队列是否为空，为空则解锁并继续查看队列中有无数据？*/
         if(m_workqueue.empty()) {
