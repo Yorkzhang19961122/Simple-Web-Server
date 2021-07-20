@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
     int port = atoi(argv[1]);  // 获取端口号: 字符串转为整数
     addsig(SIGPIPE, SIG_IGN);  //对SIGPIPE信号进行处理: 忽略SIGPIPE信号
 
-    threadpool<http_conn>* pool = NULL;  // 创建线程池，初始化线程池
+    threadpool<http_conn>* pool = NULL;  // 创建线程池，初始化线程池指针
     // try catch(...)能够捕获任何异常
     try{
         pool = new threadpool<http_conn>;
@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
     /*
         socket编程
     */
-    // 1.创建监听的文件描述符
+    // 1.创建监听的socket文件描述符
     int listenfd = socket(PF_INET, SOCK_STREAM, 0);
 
     // struct sockaddr_in: IPv4专用的socket地址结构体
@@ -76,31 +76,31 @@ int main(int argc, char* argv[]) {
     // 3.绑定IP和PORT地址
     bind(listenfd, (struct sockaddr*) &address, sizeof(address));
 
-    // 4.监听
+    // 4.监听，创建监听队列以存放待处理的客户连接，在这些客户连接被accept()之前
     listen(listenfd, 5);
 
     /*
         epoll的代码
         创建epoll对象，事件数组，添加监听fd
     */
-    epoll_event events[MAX_EVENT_NUMBER];
-    int epollfd = epoll_create(5);          // 创建epoll对象
-    addfd(epollfd, listenfd, false);        // 将监听的fd添加到epoll对象中
+    int epollfd = epoll_create(5);          // 创建epoll对象,创建一个额外的文件描述符来唯一标识内核中的epoll事件表
+    epoll_event events[MAX_EVENT_NUMBER];   // 用于存储epoll事件表中就绪事件的event数组
+    addfd(epollfd, listenfd, false);        // 主线程往epoll内核事件表中注册监听socket事件，当listen到新的客户连接时，listenfd变为就绪事件
     http_conn::m_epollfd = epollfd;         // 将http_conn中的静态成员m_epollfd设置成epollfd
 
     while(true) {
-        int num = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);
+        int num = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);  // 主线程调用epoll_wait等待一组fd上的事件，并将当前所有就绪的epoll_event复制到events数组中
         if((num < 0) && (errno != EINTR)) {
             printf("epoll failure\n");
             break;
         }
         
-        // 循环遍历epoll事件树
+        // 然后我们可以遍历事件数组以处理已经就绪的事件
         for(int i = 0; i < num; i++) {
-            int sockfd = events[i].data.fd;
+            int sockfd = events[i].data.fd;  // 事件表中就绪的socket文件描述符
             if(sockfd == listenfd) {
                 // 有客户端连接进来了
-                // 5.解除阻塞，接受客户端的连接，返回一个和客户端通信的fd
+                // 5.解除阻塞，接受(accept)客户端的连接，返回一个和客户端通信的connfd
                 struct sockaddr_in client_address;
                 socklen_t client_addrlen = sizeof(client_address);
                 int connfd = accept(listenfd, (struct sockaddr*)&client_address, &client_addrlen);
@@ -117,11 +117,11 @@ int main(int argc, char* argv[]) {
 
                 users[sockfd].close_conn();   // 对方异常断开或错误的事件发生了,关闭连接
 
-            } else if(events[i].events & EPOLLIN) {
+            } else if(events[i].events & EPOLLIN) {  // 当这一sockfd上有可读事件时，epoll_wait通知主线程
 
-                if(users[sockfd].read()) {  // 有读事件发生,一次性把所有数据都读完
+                if(users[sockfd].read()) {  // 有读事件发生,一次性把所有数据都读完（主线程从这一sockfd循环读取数据, 直到没有更多数据可读）
 
-                    pool->append(users + sockfd);  // 添加到线程池中
+                    pool->append(users + sockfd);  // 添加到线程池中（将读取到的数据封装成一个请求对象并插入请求队列）
 
                 } else {
 
@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
                 }
             } else if(events[i].events & EPOLLOUT) {
 
-                if(!users[sockfd].write()) {   // 有写事件发生,一次性写完所有数据
+                if(!users[sockfd].write()) {   // 有写事件发生,一次性写完所有数据（当这一sockfd上有可写事件时，epoll_wait通知主线程。主线程往socket上写入服务器处理客户请求的结果）
 
                     users[sockfd].close_conn();  // 写失败的话关闭连接
 

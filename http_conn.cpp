@@ -35,9 +35,10 @@ void addfd(int epollfd, int fd, bool one_shot) {
     // event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
 
     if(one_shot) {
-        // 防止同一个通信被不同的线程处理
+        // 针对connfd，开启EPOLLONESHOT，因为我们希望每个socket在任意时刻都只被一个线程处理
         event.events | EPOLLONESHOT;
     }
+    //往epoll事件表中注册fd上的事件
     epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &event);
     // 设置文件描述符非阻塞
     setnonblocking(fd);
@@ -66,7 +67,7 @@ void http_conn::init_conn(int sockfd, const sockaddr_in& addr) {
     int reuse = 1;
     setsockopt(m_sockfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     
-    // 添加到epoll对象中
+    // 将accept()到的socket文件描述符connfd注册到内核事件表中，等用户发来请求报文
     addfd(m_epollfd, sockfd, true);
     // 总用户数加1
     m_user_count++;
@@ -280,7 +281,7 @@ http_conn::HTTP_CODE http_conn::process_read() {
         (主状态机解析请求体 && 从状态机检查的一行OK) || 解析到一行完整的数据OK
         即：解析到了请求体且是完整的数据 或者 解析到了一行完整的数据        
     */
-    while(((m_check_state == CHECK_STATE_CONTENT) && (line_status == LINE_OK))
+    while(((m_check_state == CHECK_STATE_CONTENT) && (line_status == LINE_OK))  // 初始化m_check_state = CHECK_STATE_REQUESTLINE: 初始化状态为解析请求首行
             || ((line_status = parse_line()) == LINE_OK)) {
         /*获取一行数据*/
         text = get_line();
