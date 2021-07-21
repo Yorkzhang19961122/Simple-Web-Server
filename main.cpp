@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
 
-    http_conn* users = new http_conn[MAX_FD];   // 创建数组用于保存所有的客户端信息
+    http_conn* users = new http_conn[MAX_FD];   // 创建MAX_FD个http_conn类对象，存于users数组中
 
     /*
         socket编程
@@ -84,9 +84,9 @@ int main(int argc, char* argv[]) {
         创建epoll对象，事件数组，添加监听fd
     */
     int epollfd = epoll_create(5);          // 创建epoll对象,创建一个额外的文件描述符来唯一标识内核中的epoll事件表
-    epoll_event events[MAX_EVENT_NUMBER];   // 用于存储epoll事件表中就绪事件的event数组
-    addfd(epollfd, listenfd, false);        // 主线程往epoll内核事件表中注册监听socket事件，当listen到新的客户连接时，listenfd变为就绪事件
-    http_conn::m_epollfd = epollfd;         // 将http_conn中的静态成员m_epollfd设置成epollfd
+    epoll_event events[MAX_EVENT_NUMBER];   // 创建内核事件表（用于存储epoll事件表中就绪事件的event数组）
+    addfd(epollfd, listenfd, false);        // 将listenfd放在epoll树上，（主线程往epoll内核事件表中注册监听socket事件，当listen到新的客户连接时，listenfd变为就绪事件）
+    http_conn::m_epollfd = epollfd;         // 将上述epollfd赋值给http_conn类对象的m_epollfd属性（static，所有对象使用同一份）
 
     while(true) {
         int num = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);  // 主线程调用epoll_wait等待一组fd上的事件，并将当前所有就绪的epoll_event复制到events数组中
@@ -103,8 +103,12 @@ int main(int argc, char* argv[]) {
                 // 5.解除阻塞，接受(accept)客户端的连接，返回一个和客户端通信的connfd
                 struct sockaddr_in client_address;
                 socklen_t client_addrlen = sizeof(client_address);
-                int connfd = accept(listenfd, (struct sockaddr*)&client_address, &client_addrlen);
 
+#ifdef LT
+                int connfd = accept(listenfd, (struct sockaddr*)&client_address, &client_addrlen);
+                if(connfd < 0) {
+                    continue;
+                }
                 if(http_conn::m_user_count >= MAX_FD) {
                     // 目前连接数满了
                     // TODO: 给客户端写一个服务器内部正忙的信息
@@ -112,27 +116,49 @@ int main(int argc, char* argv[]) {
                     continue;
                 }
                 users[connfd].init_conn(connfd, client_address);   // 将新客户的连接数据初始化，放到user数组中
+#endif
 
-            } else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
+#ifdef ET
+                while(1) {   //需要循环接收数据
+                    int connfd = accept(listenfd, (struct sockaddr*)&client_address, &client_addrlen);
+                    if(connfd < 0) {
+                        break;
+                    }
+                    if(http_conn::m_user_count >= MAX_FD) {
+                        // 目前连接数满了
+                        // TODO: 给客户端写一个服务器内部正忙的信息
+                        close(connfd);
+                        break;
+                    }
+                    users[connfd].init_conn(connfd, client_address);   // 将新客户的连接数据初始化，放到user数组中
+                }
+                continue;
+#endif
 
-                users[sockfd].close_conn();   // 对方异常断开或错误的事件发生了,关闭连接
+            } 
+            else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
 
-            } else if(events[i].events & EPOLLIN) {  // 当这一sockfd上有可读事件时，epoll_wait通知主线程
+                users[sockfd].close_conn();          // 对方异常断开或错误的事件发生了,关闭连接
 
-                if(users[sockfd].read()) {  // 有读事件发生,一次性把所有数据都读完（主线程从这一sockfd循环读取数据, 直到没有更多数据可读）
+            } 
+            else if(events[i].events & EPOLLIN) {    // 当这一sockfd上有可读事件时，epoll_wait通知主线程
 
-                    pool->append(users + sockfd);  // 添加到线程池中（将读取到的数据封装成一个请求对象并插入请求队列）
+                if(users[sockfd].read_once()) {      // 有读事件发生,一次性把所有数据都读到对应http_conn对象的缓冲区（主线程从这一sockfd循环读取数据, 直到没有更多数据可读）
 
-                } else {
+                    pool->append(users + sockfd);    // 添加到线程池中（将读取到的数据封装成一个请求对象并插入请求队列）
 
-                    users[sockfd].close_conn();   // 读数据失败的话把连接关闭
+                } 
+                else {
+
+                    users[sockfd].close_conn();      // 读数据失败的话把连接关闭
 
                 }
-            } else if(events[i].events & EPOLLOUT) {
+            } 
+            else if(events[i].events & EPOLLOUT) {
 
-                if(!users[sockfd].write()) {   // 有写事件发生,一次性写完所有数据（当这一sockfd上有可写事件时，epoll_wait通知主线程。主线程往socket上写入服务器处理客户请求的结果）
+                if(!users[sockfd].write()) {         // 有写事件发生,一次性写完所有数据（当这一sockfd上有可写事件时，epoll_wait通知主线程。主线程往socket上写入服务器处理客户请求的结果）
 
-                    users[sockfd].close_conn();  // 写失败的话关闭连接
+                    users[sockfd].close_conn();      // 写失败的话关闭连接
 
                 }
             }

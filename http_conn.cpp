@@ -21,21 +21,27 @@ const char* error_500_form = "There was an unusual problem serving the requested
 
 // 设置文件描述符非阻塞
 int setnonblocking(int fd) {
-    int old_flag = fcntl(fd, F_GETFL);
-    int new_flag = old_flag | O_NONBLOCK;
-    fcntl(fd, F_SETFL, new_flag);
+    int old_flag = fcntl(fd, F_GETFL);     // 获取文件描述符原来的flag
+    int new_flag = old_flag | O_NONBLOCK;  // 增加非阻塞的flag
+    fcntl(fd, F_SETFL, new_flag);          // 将新的属性设置到该文件描述符上
     return old_flag;
 }
 
-// 向epoll中添加需要监听的文件描述符
+// 向epoll中添加需要监听的文件描述符（内核事件表注册新事件 放树上）
 void addfd(int epollfd, int fd, bool one_shot) {
     epoll_event event;
     event.data.fd = fd;
+
+#ifdef ET
+    event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+#endif
+
+#ifdef LT
     event.events = EPOLLIN | EPOLLRDHUP;
-    // event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+#endif
 
     if(one_shot) {
-        // 针对connfd，开启EPOLLONESHOT，因为我们希望每个socket在任意时刻都只被一个线程处理
+        // 针对客户端连接的文件描述符connfd，开启EPOLLONESHOT，监听描述符listenfd不用开启，我们希望每个连接的socket在任意时刻都只被一个线程处理
         event.events | EPOLLONESHOT;
     }
     //往epoll事件表中注册fd上的事件
@@ -44,7 +50,7 @@ void addfd(int epollfd, int fd, bool one_shot) {
     setnonblocking(fd);
 }
 
-// 从epoll中移除需要监听的文件描述符
+// 从epoll中移除需要监听的文件描述符（内核事件表删除事件）
 void removefd(int epollfd, int fd){
     epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, 0);
     close(fd);
@@ -54,7 +60,15 @@ void removefd(int epollfd, int fd){
 void modfd(int epollfd, int fd, int ev) {
     epoll_event event;
     event.data.fd = fd;
+
+#ifdef ET
     event.events = ev | EPOLLET | EPOLLONESHOT | EPOLLRDHUP;
+#endif
+
+#ifdef LT
+    event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
+#endif
+
     epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &event);
 }
 
@@ -109,17 +123,18 @@ void http_conn::close_conn() {
 
 // 非阻塞的读
 // 循环读取客户的数据直到无数据可读
-bool http_conn::read() {
+bool http_conn::read_once() {
     // 对本程序来说可有可无
     if(m_read_idx >= READ_BUFFER_SIZE) {
         return false;
     }
     // 读取到的字节
     int bytes_read = 0;
-    while(true) {
-        bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+    while(true) {  // recv读到的数据小于我们期望的缓冲区大小，因此要多次调用直到读完
+        // recv(要读取的socket的fd, 读缓冲区的位置, 读缓冲区的大小, flag一般取0)
+        bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);  // 从套接字接收数据，存储在m_read_buf缓冲区
         if(bytes_read == -1) {
-            if(errno == EAGAIN || errno == EWOULDBLOCK) {
+            if(errno == EAGAIN || errno == EWOULDBLOCK) {  // 非阻塞ET模式下，需要一次性将数据读完?
                 // 没有数据了
                 break;
             }
@@ -128,7 +143,7 @@ bool http_conn::read() {
             // 对方关闭连接
             return false;
         }
-        m_read_idx += bytes_read;
+        m_read_idx += bytes_read;  // 修改m_read_idx的读取字节数
     }
     printf("[INFO] 读取到了请求报文: \n%s\n", m_read_buf);
     return true;

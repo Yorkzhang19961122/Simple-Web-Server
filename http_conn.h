@@ -64,7 +64,7 @@ public:
     void init_conn(int sockfd, const sockaddr_in& addr);  // 初始化新接受的客户连接
     void close_conn();                                    // 关闭连接
     void process();                                       // 处理客户端的请求
-    bool read();                                          // 非阻塞的读
+    bool read_once();                                     // 非阻塞的读
     bool write();                                         // 非阻塞的写
 
 private:
