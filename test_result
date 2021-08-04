@@ -1,0 +1,30 @@
+listenfd:ET + connfd:ET
+Benchmarking: GET http://192.168.224.147:10000/index1.html
+7000 clients, running 10 sec.
+
+Speed=645846 pages/min, 1722208 bytes/sec.
+Requests: 107641 susceed, 0 failed.
+------------------------------------------------------------------
+listenfd:LT + connfd:LT
+Benchmarking: GET http://192.168.224.147:10000/index1.html
+7000 clients, running 10 sec.
+
+Speed=1015410 pages/min, 2707616 bytes/sec.
+Requests: 169235 susceed, 0 failed.
+------------------------------------------------------------------
+
+listenfd:ET + connfd:LT
+Benchmarking: GET http://192.168.224.147:10000/index1.html
+7000 clients, running 10 sec.
+
+Speed=1063398 pages/min, 2835360 bytes/sec.
+Requests: 177233 susceed, 0 failed.
+
+------------------------------------------------------------------
+listenfd:LT + connfd:ET
+Benchmarking: GET http://192.168.224.147:10000/index1.html
+7000 clients, running 10 sec.
+
+Speed=628752 pages/min, 1676320 bytes/sec.
+Requests: 104792 susceed, 0 failed.
+

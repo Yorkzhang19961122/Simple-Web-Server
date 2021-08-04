@@ -3,8 +3,8 @@
 // #define connfdLT    // 水平触发阻塞
 #define connfdET    // 边缘触发非阻塞
 
-// #define listenfdLT  // 水平触发阻塞
-#define listenfdET  // 边缘触发非阻塞
+#define listenfdLT  // 水平触发阻塞
+// #define listenfdET  // 边缘触发非阻塞
 
 // 静态值的初始化
 // 所有socket上的事件都被注册到同一个epoll对象中
@@ -147,7 +147,7 @@ bool http_conn::read_once() {
 
 #ifdef connfdLT
 
-    bytes_read = recv(m_socked, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+    bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
     m_read_idx += bytes_read;
 
     if(bytes_read <= 0) {
@@ -163,7 +163,7 @@ bool http_conn::read_once() {
         // recv(要读取的socket的fd, 读缓冲区的位置, 读缓冲区的大小, flag一般取0)
         bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);  // 从套接字接收数据，存储在m_read_buf缓冲区
         if(bytes_read == -1) {
-            if(errno == EAGAIN || errno == EWOULDBLOCK) {  // 非阻塞ET模式下，需要一次性将数据读完?
+            if(errno == EAGAIN || errno == EWOULDBLOCK) {  // 非阻塞ET模式下，需要一次性将数据读完
                 // 没有数据了
                 break;
             }

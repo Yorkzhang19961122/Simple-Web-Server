@@ -16,8 +16,8 @@
 #define MAX_FD 65535            // 最大的文件描述符个数
 #define MAX_EVENT_NUMBER 10000  // epoll最大支持同时监听的事件个数
 
-// #define listenfdLT    // 水平触发阻塞
-#define listenfdET    // 边缘触发非阻塞
+#define listenfdLT    // 水平触发阻塞
+// #define listenfdET    // 边缘触发非阻塞
 
 extern void addfd(int epollfd, int fd, bool one_shot);  // 添加文件描述符到epoll中
 extern void removefd(int epollfd, int fd);              // 从epoll中删除文件描述符
