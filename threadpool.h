@@ -39,11 +39,9 @@ template<typename T>
 threadpool<T>::threadpool(int thread_number, int max_requests):
     m_thread_number(thread_number), m_max_requests(max_requests),
     m_stop(false), m_threads(NULL) {
-        /**/
         if(thread_number <= 0 || max_requests <= 0) {  // 传入的初始化参数合法性判断
             throw std::exception();
         }
-        /**/
         m_threads = new pthread_t[m_thread_number];    // 创建线程池数组并判断是否创建成功
         if(!m_threads) {
             throw std::exception();

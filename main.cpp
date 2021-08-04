@@ -16,6 +16,9 @@
 #define MAX_FD 65535            // 最大的文件描述符个数
 #define MAX_EVENT_NUMBER 10000  // epoll最大支持同时监听的事件个数
 
+// #define listenfdLT    // 水平触发阻塞
+#define listenfdET    // 边缘触发非阻塞
+
 extern void addfd(int epollfd, int fd, bool one_shot);  // 添加文件描述符到epoll中
 extern void removefd(int epollfd, int fd);              // 从epoll中删除文件描述符
 // extern void modfd(int epollfd, int fd, int ev);         // 修改epoll中的文件描述符
@@ -104,7 +107,7 @@ int main(int argc, char* argv[]) {
                 struct sockaddr_in client_address;
                 socklen_t client_addrlen = sizeof(client_address);
 
-#ifdef LT
+#ifdef listenfdLT
                 int connfd = accept(listenfd, (struct sockaddr*)&client_address, &client_addrlen);
                 if(connfd < 0) {
                     continue;
@@ -118,7 +121,7 @@ int main(int argc, char* argv[]) {
                 users[connfd].init_conn(connfd, client_address);   // 将新客户的连接数据初始化，放到user数组中
 #endif
 
-#ifdef ET
+#ifdef listenfdET
                 while(1) {   //需要循环接收数据
                     int connfd = accept(listenfd, (struct sockaddr*)&client_address, &client_addrlen);
                     if(connfd < 0) {
@@ -144,7 +147,7 @@ int main(int argc, char* argv[]) {
             else if(events[i].events & EPOLLIN) {    // 当这一sockfd上有可读事件时，epoll_wait通知主线程
 
                 if(users[sockfd].read_once()) {      // 有读事件发生,一次性把所有数据都读到对应http_conn对象的缓冲区（主线程从这一sockfd循环读取数据, 直到没有更多数据可读）
-
+                    // 指针的加法是每次加一的时候实际上跳过指针类型大小的空间
                     pool->append(users + sockfd);    // 添加到线程池中（将读取到的数据封装成一个请求对象并插入请求队列）
 
                 } 
