@@ -19,7 +19,7 @@
 #define listenfdLT    // 水平触发阻塞
 // #define listenfdET    // 边缘触发非阻塞
 
-extern void addfd(int epollfd, int fd, bool one_shot);  // 添加文件描述符到epoll中
+extern void addfd(int epollfd, int fd, bool one_shot);  // 添加文件描述符到epoll中，extern声明函数在外部定义
 extern void removefd(int epollfd, int fd);              // 从epoll中删除文件描述符
 // extern void modfd(int epollfd, int fd, int ev);         // 修改epoll中的文件描述符
 
@@ -37,12 +37,13 @@ void addsig(int sig, void(handler)(int)) {
     sigaction(sig, &sa, NULL);  // 设置信号处理函数
 }
 
-int main(int argc, char* argv[]) {
+/*main函数是主线程*/
+int main(int argc, char* argv[]) {  // 通过命令行指定端口号，argc：参数个数
     // 首先判断执行程序传入的参数是否正确
     // 如果不传参数的话，默认只有我们执行函数的命令这一个参数
     if(argc <= 1) {
         printf("请按照如下格式执行程序: %s port_number\n", basename(argv[0]));
-        exit(-1);
+        exit(-1);  // 退出程序
     }
 
     int port = atoi(argv[1]);  // 获取端口号: 字符串转为整数
@@ -56,6 +57,7 @@ int main(int argc, char* argv[]) {
         exit(-1);
     }
 
+    /*创建一个数组用于保存所有客户端的信息*/
     http_conn* users = new http_conn[MAX_FD];   // 创建MAX_FD个http_conn类对象，存于users数组中
 
     /*
@@ -72,7 +74,7 @@ int main(int argc, char* argv[]) {
     // htonl: IP->主机字节序转为网络字节序
     address.sin_port = htons(port);
 
-    // 2.设置socket属性之端口复用，在绑定之前
+    // 2.设置socket属性之端口复用，需要在绑定IP和PORT之前
     int reuse = 1;
     setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     
