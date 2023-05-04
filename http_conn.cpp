@@ -64,7 +64,7 @@ void addfd(int epollfd, int fd, bool one_shot) {
     setnonblocking(fd);
 }
 
-// 从epoll中移除需要监听的文件描述符（内核事件表删除事件）
+// 从epoll中移除监听的文件描述符（内核事件表删除事件）
 void removefd(int epollfd, int fd){
     epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, 0);
     close(fd);
@@ -164,7 +164,7 @@ bool http_conn::read_once() {
         bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);  // 从套接字接收数据，存储在m_read_buf缓冲区
         if(bytes_read == -1) {
             if(errno == EAGAIN || errno == EWOULDBLOCK) {  // 非阻塞ET模式下，需要一次性将数据读完
-                // 没有数据了
+                // EAGAIN、EWOULDBLOCK表示没有数据了
                 break;
             }
             return false;
@@ -365,7 +365,7 @@ http_conn::HTTP_CODE http_conn::process_read() {
                 }
                 break;
             }
-            case CHECK_STATE_CONTENT: {         // 解析消息体
+            case CHECK_STATE_CONTENT: {         // 解析请求体
                 ret = parse_content(text);
                 if(ret == GET_REQUEST) {
                     return do_request();
@@ -606,13 +606,13 @@ bool http_conn::process_write(HTTP_CODE ret) {
 
 // 由线程池中的工作线程调用的，这是处理HTTP请求的入口函数
 void http_conn::process() {
-    HTTP_CODE read_ret = process_read();       // 解析HTTP请求
+    HTTP_CODE read_ret = process_read();       // 1.解析HTTP请求
     if(read_ret == NO_REQUEST) {               // NO_REQUEST，表示请求不完整，需要继续接收请求数据
         modfd(m_epollfd, m_sockfd, EPOLLIN);   // 修改socket事件，注册并监听读事件
         return;
     }
 
-    bool write_ret = process_write(read_ret);  // 生成响应
+    bool write_ret = process_write(read_ret);  // 2.生成响应
     if(!write_ret) {
         close_conn();
     }

@@ -88,14 +88,14 @@ int main(int argc, char* argv[]) {  // 通过命令行指定端口号，argc：�
         epoll的代码
         创建epoll对象，事件数组，添加监听fd
     */
-    int epollfd = epoll_create(5);          // 创建epoll对象,创建一个额外的文件描述符来唯一标识内核中的epoll事件表
+    int epollfd = epoll_create(5);          // (调用epoll_create方法创建一个epoll的句柄，该句柄代表着一个事件表)创建epoll对象,创建一个额外的文件描述符来唯一标识内核中的epoll事件表
     epoll_event events[MAX_EVENT_NUMBER];   // 创建内核事件表（用于存储epoll事件表中就绪事件的event数组）
     addfd(epollfd, listenfd, false);        // 将listenfd放在epoll树上，（主线程往epoll内核事件表中注册监听socket事件，当listen到新的客户连接时，listenfd变为就绪事件）
     http_conn::m_epollfd = epollfd;         // 将上述epollfd赋值给http_conn类对象的m_epollfd属性（static，所有对象使用同一份）
 
     while(true) {
-        int num = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);  // 主线程调用epoll_wait等待一组fd上的事件，并将当前所有就绪的epoll_event复制到events数组中
-        if((num < 0) && (errno != EINTR)) {
+        int num = epoll_wait(epollfd, events, MAX_EVENT_NUMBER, -1);  // 主线程调用epoll_wait等待监听一组fd上的事件产生，并将当前所有就绪的epoll_event复制到events数组中
+        if((num < 0) && (errno != EINTR)) {  // num代表检测到了几个事件,num<0表示epollwait失败了
             printf("epoll failure\n");
             break;
         }
@@ -103,8 +103,7 @@ int main(int argc, char* argv[]) {  // 通过命令行指定端口号，argc：�
         // 然后我们可以遍历事件数组以处理已经就绪的事件
         for(int i = 0; i < num; i++) {
             int sockfd = events[i].data.fd;  // 事件表中就绪的socket文件描述符
-            if(sockfd == listenfd) {
-                // 有客户端连接进来了
+            if(sockfd == listenfd) {  // 有客户端连接进来了
                 // 5.解除阻塞，接受(accept)客户端的连接，返回一个和客户端通信的connfd
                 struct sockaddr_in client_address;
                 socklen_t client_addrlen = sizeof(client_address);
@@ -114,8 +113,7 @@ int main(int argc, char* argv[]) {  // 通过命令行指定端口号，argc：�
                 if(connfd < 0) {
                     continue;
                 }
-                if(http_conn::m_user_count >= MAX_FD) {
-                    // 目前连接数满了
+                if(http_conn::m_user_count >= MAX_FD) {  // 判断当前连接数是否已满
                     // TODO: 给客户端写一个服务器内部正忙的信息
                     close(connfd);
                     continue;
@@ -141,9 +139,9 @@ int main(int argc, char* argv[]) {  // 通过命令行指定端口号，argc：�
 #endif
 
             } 
-            else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
+            else if(events[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {  // 对方异常断开或错误的事件发生了
 
-                users[sockfd].close_conn();          // 对方异常断开或错误的事件发生了,关闭连接
+                users[sockfd].close_conn();          // 关闭连接
 
             } 
             else if(events[i].events & EPOLLIN) {    // 当这一sockfd上有可读事件时，epoll_wait通知主线程

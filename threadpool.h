@@ -42,7 +42,7 @@ threadpool<T>::threadpool(int thread_number, int max_requests):
         if(thread_number <= 0 || max_requests <= 0) {  // 传入的初始化参数合法性判断
             throw std::exception();
         }
-        m_threads = new pthread_t[m_thread_number];    // 创建线程池数组并判断是否创建成功
+        m_threads = new pthread_t[m_thread_number];    // 创建线程池数组(返回该数组的首地址)并判断是否创建成功
         if(!m_threads) {
             throw std::exception();
         }
@@ -74,7 +74,7 @@ threadpool<T>::~threadpool() {
 /*往队列中添加任务，需用锁保证线程同步*/
 template<typename T>
 bool threadpool<T>::append(T* request) {
-    m_queuelocker.lock();                        // 上锁
+    m_queuelocker.lock();                        // 互斥锁上锁
     if(m_workqueue.size() > m_max_requests) {    // 如果请求队列超出最大量了，解锁并返回false
         m_queuelocker.unlock();
         return false;
@@ -104,8 +104,8 @@ void threadpool<T>::run() {
             continue;
         }
         T* request = m_workqueue.front();  // 队列中有数据，则获取队列头的任务request
-        m_workqueue.pop_front();
-        m_queuelocker.unlock();
+        m_workqueue.pop_front();           // 取出来以后删除队列头的任务
+        m_queuelocker.unlock();            // 任务队列解锁，允许其他线程操作
         if(!request) {                     // 没获取到任务，继续
             continue;
         }

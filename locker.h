@@ -63,11 +63,11 @@ public:
     bool timedwait(pthread_mutex_t* mutex, struct timespec t) {
         return pthread_cond_timedwait(&m_cond, mutex, &t) == 0;
     }
-    
+    /*将一个或多个线程唤醒*/
     bool signal() {
         return pthread_cond_signal(&m_cond) == 0;
     }
-
+    /*唤醒所有线程*/
     bool broadcast() {
         return pthread_cond_broadcast(&m_cond) == 0;
     }
